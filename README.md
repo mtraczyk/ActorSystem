@@ -1,2 +1,2 @@
 # pwCProject
-Parallel programming project in C language.
+System of actors, implemented concurrently in C language.
