@@ -21,11 +21,10 @@ typedef long message_type_t;
 #define POOL_SIZE 3
 #endif
 
-typedef struct message
-{
-    message_type_t message_type;
-    size_t nbytes;
-    void *data;
+typedef struct message {
+  message_type_t message_type;
+  size_t nbytes;
+  void *data;
 } message_t;
 
 typedef long actor_id_t;
@@ -34,10 +33,9 @@ actor_id_t actor_id_self();
 
 typedef void (*const act_t)(void **stateptr, size_t nbytes, void *data);
 
-typedef struct role
-{
-    size_t nprompts;
-    act_t *prompts;
+typedef struct role {
+  size_t nprompts;
+  act_t *prompts;
 } role_t;
 
 int actor_system_create(actor_id_t *actor, role_t *const role);
