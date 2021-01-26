@@ -1,4 +1,4 @@
-#include "minunit.h"
+/*#include "minunit.h"
 #include "cacti.h"
 
 #include <stdbool.h>
@@ -32,5 +32,5 @@ int main()
     printf(__FILE__ ": Tests run: %d\n", tests_run);
 
     return result != 0;
-}
+}*/
 

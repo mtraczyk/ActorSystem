@@ -1,6 +1,6 @@
 // http: // www.jera.com/techinfo/jtns/jtn002.html
 
-#ifndef MINUNIT_H
+/*#ifndef MINUNIT_H
 #define MINUNIT_H
 
 #define mu_assert(message, test)                                               \
@@ -19,4 +19,4 @@
 
 extern int tests_run;
 
-#endif
+#endif*/
