@@ -1,2 +1,2 @@
 # pwCProject
-System of actors, implemented concurrently in C language.
+Cache friendly system of actors, implemented concurrently in C language.
