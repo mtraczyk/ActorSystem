@@ -1,5 +1,6 @@
 #include "cacti.h"
+#include "global.h"
 
-int main(){
-	return 0;
+int main() {
+  return 0;
 }
