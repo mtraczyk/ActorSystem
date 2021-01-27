@@ -6,6 +6,9 @@
 
 // Global data for the current system.
 
+// Threads identifiers in the current system.
+pthread_t th[POOL_SIZE];
+
 // Attributes for the POOL of threads.
 pthread_attr_t attr;
 
@@ -110,7 +113,7 @@ static void initialize_system_global_memory(actor_id_t *actor, role_t *const rol
     queue_of_actors_length[i] = 1;
 }
 
-// Adjusting length of actor_roles and actor_messages.
+// Adjusts length of actor_roles and actor_messages.
 static void adjust_dynamic_arrays() {
   // I`ve got to acquire the mutex.
   int s = pthread_mutex_lock(&mutex);
@@ -144,6 +147,7 @@ static void adjust_dynamic_arrays() {
     handle_error_en(s, "pthread_mutex");
 }
 
+// Adjusts length of a queue of actors.
 static void adjust_queue_of_actors(int queue_number) {
   // I`ve got to acquire the mutex.
   int s = pthread_mutex_lock(&mutex);
@@ -167,20 +171,29 @@ actor_id_t actor_id_self() {
 
 }
 
+void *thread_task(void *data) {
+
+}
+
 int actor_system_create(actor_id_t *actor, role_t *const role) {
   initialize_system_global_memory(actor, role);
+  int *thread_task_argument;
+  int s;
 
-  int s = pthread_mutex_init(&mutex, &mutex_attr);
-  if (s != 0)
+  if ((s = pthread_mutex_init(&mutex, &mutex_attr)) != 0)
     handle_error_en(s, "pthread_mutexattr_init");
 
-  s = pthread_attr_init(&attr);
-  if (s != 0)
+  if ((s = pthread_attr_init(&attr)) != 0)
     handle_error_en(s, "pthread_attr_init");
 
   for (int i = 0; i < POOL_SIZE; i++) {
-
+    thread_task_argument = malloc(sizeof(int));
+    *thread_task_argument = i;
+    if ((s = pthread_create(&th[i], &attr, thread_task, thread_task_argument)) != 0)
+      handle_error_en(s, "pthread_create");
   }
+
+  return 0; // Successful creation of a new actor system.
 }
 
 void actor_system_join(actor_id_t actor) {
