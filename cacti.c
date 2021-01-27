@@ -3,20 +3,24 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 // Global data for the current system.
 
 // Threads identifiers in the current system.
-pthread_t th[POOL_SIZE];
+static pthread_t th[POOL_SIZE];
+
+bool is_system_alive; // It`err false when all actors are dead.
 
 // Attributes for the POOL of threads.
-pthread_attr_t attr;
-
-// Attribute for mutex.
-pthread_mutexattr_t mutex_attr;
+static pthread_attr_t attr;
 
 // Mutex - will protect global variables.
-pthread_mutex_t mutex;
+static pthread_mutex_t mutex;
+
+// Threads will sleep when they have nothing to do.
+static pthread_cond_t thread_wait[POOL_SIZE];
+static pthread_mutex_t lock[POOL_SIZE];
 
 // Number of actors in the current system.
 static actor_id_t number_of_actors = 0;
@@ -88,7 +92,8 @@ static inline void check_alloc_validity(void *const data) {
 static void initialize_system_global_memory(actor_id_t *actor, role_t *const role) {
   number_of_actors = 1;
   actor_roles_and_messages_length = 1;
-  // The first actor`s identifier.
+  is_system_alive = true;
+  // The first actor`err identifier.
   *actor = 0;
 
   check_alloc_validity(actor_roles = malloc(sizeof(role_t *)));
@@ -113,12 +118,27 @@ static void initialize_system_global_memory(actor_id_t *actor, role_t *const rol
     queue_of_actors_length[i] = 1;
 }
 
+void initialize_pthread_usage() {
+  int err;
+
+  if ((err = pthread_mutex_init(&mutex, 0)) != 0)
+    handle_error_en(err, "pthread_mutex_init");
+
+  if ((err = pthread_attr_init(&attr)) != 0)
+    handle_error_en(err, "pthread_attr_init");
+
+  for (int i = 0; i < POOL_SIZE; i++) {
+    if ((err = pthread_cond_init(&thread_wait[i], 0)) != 0)
+      handle_error_en(err, "pthread_cond_init");
+  }
+}
+
 // Adjusts length of actor_roles and actor_messages.
 static void adjust_dynamic_arrays() {
   // I`ve got to acquire the mutex.
-  int s = pthread_mutex_lock(&mutex);
-  if (s != 0)
-    handle_error_en(s, "pthread_mutex");
+  int err;
+  if ((err = pthread_mutex_lock(&mutex)) != 0)
+    handle_error_en(err, "pthread_mutex");
 
   if (actor_roles_and_messages_length == number_of_actors) {
     actor_roles_and_messages_length = actor_roles_and_messages_length * MULTIPLIER / DIVIDER;
@@ -142,17 +162,16 @@ static void adjust_dynamic_arrays() {
     }
   }
 
-  s = pthread_mutex_unlock(&mutex);
-  if (s != 0)
-    handle_error_en(s, "pthread_mutex");
+  if ((err = pthread_mutex_unlock(&mutex)) != 0)
+    handle_error_en(err, "pthread_mutex");
 }
 
 // Adjusts length of a queue of actors.
 static void adjust_queue_of_actors(int queue_number) {
   // I`ve got to acquire the mutex.
-  int s = pthread_mutex_lock(&mutex);
-  if (s != 0)
-    handle_error_en(s, "pthread_mutex");
+  int err;
+  if ((err = pthread_mutex_lock(&mutex)) != 0)
+    handle_error_en(err, "pthread_mutex");
 
   if (queue_of_actors_length[queue_number] == number_of_actors_in_queue[queue_number]) {
     queue_of_actors_length[queue_number] =
@@ -162,9 +181,8 @@ static void adjust_queue_of_actors(int queue_number) {
                                    queue_of_actors_length[queue_number] * sizeof(actor_id_t)));
   }
 
-  s = pthread_mutex_unlock(&mutex);
-  if (s != 0)
-    handle_error_en(s, "pthread_mutex");
+  if ((err = pthread_mutex_unlock(&mutex)) != 0)
+    handle_error_en(err, "pthread_mutex");
 }
 
 actor_id_t actor_id_self() {
@@ -172,25 +190,40 @@ actor_id_t actor_id_self() {
 }
 
 void *thread_task(void *data) {
+  int thread_number = (int) data;
+  int err;
+  free(data);
 
+  while (is_system_alive) {
+    if ((err = pthread_mutex_lock(&mutex)) != 0)
+      handle_error_en(err, "pthread_mutex");
+
+    if (!queue_of_actors_length[thread_number]) {
+      // Thread has nothing to do but wait.
+      if ((err = pthread_mutex_unlock(&mutex)) != 0)
+        handle_error_en(err, "pthread_mutex");
+
+      while (!queue_of_actors_length)
+        if ((err = pthread_cond_wait(&thread_wait[thread_number], &lock[thread_number])) != 0)
+          handle_error_en(err, "cond wait failed");
+    }
+
+    if ((err = pthread_mutex_unlock(&mutex)) != 0)
+      handle_error_en(err, "pthread_mutex");
+  }
 }
 
 int actor_system_create(actor_id_t *actor, role_t *const role) {
   initialize_system_global_memory(actor, role);
+  initialize_pthread_usage();
+  int err;
   int *thread_task_argument;
-  int s;
-
-  if ((s = pthread_mutex_init(&mutex, &mutex_attr)) != 0)
-    handle_error_en(s, "pthread_mutexattr_init");
-
-  if ((s = pthread_attr_init(&attr)) != 0)
-    handle_error_en(s, "pthread_attr_init");
 
   for (int i = 0; i < POOL_SIZE; i++) {
     thread_task_argument = malloc(sizeof(int));
     *thread_task_argument = i;
-    if ((s = pthread_create(&th[i], &attr, thread_task, thread_task_argument)) != 0)
-      handle_error_en(s, "pthread_create");
+    if ((err = pthread_create(&th[i], &attr, thread_task, thread_task_argument)) != 0)
+      handle_error_en(err, "pthread_create");
   }
 
   return 0; // Successful creation of a new actor system.
