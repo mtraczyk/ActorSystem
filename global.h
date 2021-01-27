@@ -70,4 +70,12 @@ static inline void check_alloc_validity(void *const data) {
 }
 
 
+// Enumeration types.
+
+enum actor_system_create_return_codes {
+  SUCCESS = 0,
+  ERROR = -1
+};
+
+
 #endif // GLOBAL_H

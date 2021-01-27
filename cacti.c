@@ -42,6 +42,9 @@ actor_id_t actor_id_self() {
 
 // Creates a brand new actor system.
 int actor_system_create(actor_id_t *actor, role_t *const role) {
+  if (actor == NULL || role == NULL)
+    return ERROR;
+
   int err;
   initialize();
 
@@ -53,9 +56,11 @@ int actor_system_create(actor_id_t *actor, role_t *const role) {
   for (uint32_t i = 0; i < POOL_SIZE; i++) {
     check_alloc_validity(thread_number = malloc(sizeof(uint32_t)));
     *thread_number = i;
-    if ((err = pthread_create(&th[i], &attr, thread_task, thread_number)))
+    if ((err = pthread_create(&th[i], &attr, thread_task, thread_number)) != 0)
       handle_error_en(err, "pthread_create");
   }
+
+  return SUCCESS;
 }
 
 void actor_system_join(actor_id_t actor) {
