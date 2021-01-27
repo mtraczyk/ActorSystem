@@ -8,7 +8,11 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-extern uint32_t number_of_actors; // Number of actors in the system.
+static bool is_the_system_alive = true;
+static uint32_t number_of_actors; // Number of actors in the system.
+static pthread_mutex_t mutex; // Mutex for access to make global data changes.
+static pthread_attr_t attr; // pthread_attr_t for threads.
+static pthread_t th[POOL_SIZE]; // Threads` ids.
 
 // Cyclic buffer of messages acting as a queue.
 typedef struct message_buffer {
@@ -26,8 +30,8 @@ typedef struct actor_info {
   pthread_mutex_t lock;  // Mutex ensuring exclusive access to buffer.
 } actor_info;
 
-extern actor_info *actors; // An array of actors` info.
-extern uint32_t actor_info_length; // Length of an actors array.
+static actor_info *actors; // An array of actors` info.
+static uint32_t actor_info_length; // Length of an actors array.
 
 // Buffer of actor_id_t acting as a queue.
 typedef struct actor_buffer {
@@ -37,7 +41,7 @@ typedef struct actor_buffer {
   int size; // Size of the buffer.
 } actor_buffer;
 
-extern actor_buffer *actor_q[POOL_SIZE]; // Actor_buffer, one for every thread acting as a queue.
+static actor_buffer *actor_q; // Actor_buffer, one for every thread acting as a queue.
 
 
 // Constants
