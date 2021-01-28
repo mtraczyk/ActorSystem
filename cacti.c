@@ -3,6 +3,7 @@
 // Initializes global memory of the current actor system.
 void initialize() {
   int err;
+  is_the_system_alive = true;
   number_of_actors = 1;
   number_of_dead_actors = 0;
   actor_info_length = 1;
@@ -50,13 +51,34 @@ void receive_spawn(uint32_t actor, message_t message) {
 }
 
 void receive_godie(uint32_t actor, message_t message) {
+  int err;
   // Here I still have exclusive access to the actor`s info.
+  actors[actor].is_actor_dead = true;
 
+  // Acquiring access to global data.
+  if ((err = pthread_mutex_lock(&mutex)) != 0)
+    handle_error_en(err, "pthread_mutex_lock");
+
+  number_of_dead_actors++;
+
+  if (number_of_dead_actors == number_of_actors) {
+    // System can shut down, all actors are dead.
+
+    is_the_system_alive = false;
+    for (int i = 0; i < POOL_SIZE; i++) {
+      if (i != (actor % POOL_SIZE)) {
+        if ((err = pthread_cond_signal(&cond[i])) != 0)
+          handle_error_en(err, "pthread_cond_signal");
+      }
+    }
+  }
+
+  if ((err = pthread_mutex_unlock(&mutex)) != 0)
+    handle_error_en(err, "pthread_mutex_unlock");
 }
 
 void receive_standard_message(uint32_t actor, message_t message) {
   // Here I still have exclusive access to the actor`s info.
-
 }
 
 void actor_receive_message(uint32_t actor_with_message) {
@@ -66,7 +88,6 @@ void actor_receive_message(uint32_t actor_with_message) {
 
   if (!actors[actor_with_message].is_actor_dead) {
     obtain_message(actor_with_message, &message);
-
 
     switch (message.message_type) {
       case MSG_HELLO:
@@ -108,6 +129,22 @@ void get_actor_to_receive_message(actor_id_t *actor_with_message, uint32_t threa
   }
 }
 
+bool is_system_dead() {
+  int err;
+  bool aux;
+
+  // Acquiring access to global data.
+  if ((err = pthread_mutex_lock(&mutex)) != 0)
+    handle_error_en(err, "pthread_mutex_lock");
+
+  aux = is_the_system_alive;
+
+  if ((err = pthread_mutex_unlock(&mutex)) != 0)
+    handle_error_en(err, "pthread_mutex_unlock");
+
+  return !aux;
+}
+
 /* Code that POOL_SIZE threads have to execute.
 */
 void *thread_task(void *data) {
@@ -115,7 +152,10 @@ void *thread_task(void *data) {
   int err;
   actor_id_t actor_with_message;
 
-  while (is_the_system_alive) {
+  while (true) {
+    if (is_system_dead())
+      break;
+
     // Acquiring access to thread`s queue.
     if ((err = pthread_mutex_lock(&actor_q[thread_number].lock)) != 0)
       handle_error_en(err, "pthread_mutex_lock");
@@ -124,10 +164,19 @@ void *thread_task(void *data) {
       // Thread has nothing to do. Better for it to go to sleep.
       if ((err = pthread_cond_wait(&cond[thread_number], &actor_q[thread_number].lock)) != 0)
         handle_error_en(err, "pthread_cond_wait");
+
+      if (is_system_dead())
+        break;
+    }
+
+    if (actor_q[thread_number].number_of_actors == 0) {
+      if ((err = pthread_mutex_unlock(&actor_q[thread_number].lock)) != 0)
+        handle_error_en(err, "pthread_mutex_unlock");
+
+      break;
     }
 
     // Here, the thread does have the mutex and there is at least one actor with some messages.
-
     get_actor_to_receive_message(&actor_with_message, thread_number);
 
     // Returning access to the queue.
@@ -136,7 +185,7 @@ void *thread_task(void *data) {
 
     actor_receive_message(actor_with_message);
   }
-
+  
   free(data);
 }
 
@@ -172,7 +221,6 @@ int actor_system_create(actor_id_t *actor, role_t *const role) {
 
 void actor_system_join(actor_id_t actor) {
   int err;
-  is_the_system_alive = false;
 
   for (uint32_t i = 0; i < POOL_SIZE; i++)
     if ((err = pthread_join(th[i], 0)) != 0)
@@ -223,8 +271,14 @@ int send_message(actor_id_t actor, message_t message) {
   int err;
   bool is_actor_dead, is_queue_full;
 
+  if ((err = pthread_mutex_lock(&mutex)) != 0)
+    handle_error_en(err, "pthread_mutex_lock");
+
   if (actor >= number_of_actors)
     return ACTOR_ID_INCORRECT;
+
+  if ((err = pthread_mutex_unlock(&mutex)) != 0)
+    handle_error_en(err, "pthread_mutex_unlock");
 
   // Obtaining exclusive access to the actor info.
   if ((err = pthread_mutex_lock(&actors[actor].lock)) != 0)
