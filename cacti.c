@@ -130,8 +130,36 @@ void actor_system_join(actor_id_t actor) {
 #warning !CLEAN MEMORY!
 }
 
-void add_actor_to_thread_queue(actor_id_t actor) {
+// If needed adjusts thread`s queue size.
+void adjust_size_of_queue(uint32_t thread_number) {
+  // I have exclusive access to the thread`s queue.
+  if (actor_q[thread_number].number_of_actors == actor_q[thread_number].size) {
+    // The queue has to be resized.
+    uint32_t new_size = (actor_q[thread_number].size + 1) * MULTIPLIER / DIVIDER;
+    check_alloc_validity(actor_q[thread_number].actor_id =
+                           realloc(actor_q[thread_number].actor_id, new_size * sizeof(actor_id_t)));
+  }
+}
 
+void add_actor_to_thread_queue(actor_id_t actor) {
+  int err;
+  uint32_t thread_number = actor % POOL_SIZE;
+
+  // Acquiring access to thread`s queue.
+  if ((err = pthread_mutex_lock(&actor_q[thread_number].lock)) != 0)
+    handle_error_en(err, "pthread_mutex_lock");
+
+  adjust_size_of_queue(thread_number);
+
+  // Now there must be enough place for another actor_id_t.
+  actor_q[thread_number].actor_id[actor_q[thread_number].writepos] = actor;
+  actor_q[thread_number].number_of_actors++;
+  actor_q[thread_number].writepos =
+    (actor_q[thread_number].writepos + 1) % actor_q[thread_number].size;
+
+  // Returning access to the queue.
+  if ((err = pthread_mutex_unlock(&actor_q[thread_number].lock)) != 0)
+    handle_error_en(err, "pthread_mutex_unlock");
 }
 
 int send_message(actor_id_t actor, message_t message) {
@@ -171,6 +199,7 @@ int send_message(actor_id_t actor, message_t message) {
 
   return SEND_MESSAGE_SUCCESS;
 }
+
 
 
 
