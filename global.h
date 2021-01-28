@@ -19,7 +19,7 @@ static pthread_cond_t cond[POOL_SIZE]; // Thread will go to sleep when it has no
 typedef struct message_buffer {
   message_t *messages; // The actual data.
   uint32_t readpos, writepos; // Positions for reading and writing.
-  uint32_t size; // Number of messages in the messages array.
+  uint32_t number_of_messages; // Number of messages in the buffer.
 } message_buffer;
 
 // Basic info about an actor.

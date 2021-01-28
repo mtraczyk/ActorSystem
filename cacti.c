@@ -14,7 +14,7 @@ void initialize() {
   check_alloc_validity(actors[0].msg_q.messages = malloc(ACTOR_QUEUE_LIMIT * sizeof(message_t)));
   if ((err = pthread_mutex_init(&actors[0].lock, 0)) != 0)
     handle_error_en(err, "pthread_mutex_init");
-  actors[0].msg_q.writepos = actors[0].msg_q.readpos = actors[0].msg_q.size = 0;
+  actors[0].msg_q.writepos = actors[0].msg_q.readpos = actors[0].msg_q.number_of_messages = 0;
 
   check_alloc_validity(actor_q = malloc(POOL_SIZE * sizeof(actor_buffer)));
   for (uint32_t i = 0; i < POOL_SIZE; i++) {
@@ -30,11 +30,41 @@ void initialize() {
   }
 }
 
+void actor_receive_message(uint32_t actor_with_message) {
+  int err;
+  // Here I still have the access to the actor`s info.
+
+  if ((err = pthread_mutex_unlock(&actors[actor_with_message].lock)) != 0)
+    handle_error_en(err, "pthread_mutex_unlock");
+}
+
+// Gets id of an actor with messages, updates the queue accordingly to the situation.
+void get_actor_to_receive_message(actor_id_t *actor_with_message, uint32_t thread_number) {
+  int err;
+
+  *actor_with_message = actor_q[thread_number].actor_id[actor_q[thread_number].readpos];
+  actor_q[thread_number].readpos =
+    (actor_q[thread_number].readpos + 1) % actor_q[thread_number].size;
+
+  // I need to obtain exclusive access to the *actor_with_message data.
+  if ((err = pthread_mutex_lock(&actors[*actor_with_message].lock)) != 0)
+    handle_error_en(err, "pthread_mutex_lock");
+
+  if (actors[*actor_with_message].msg_q.number_of_messages > 1) {
+    actor_q[thread_number].actor_id[actor_q[thread_number].writepos] = *actor_with_message;
+    actor_q[thread_number].writepos =
+      (actor_q[thread_number].writepos + 1) % actor_q[thread_number].size;
+  } else {
+    actor_q[thread_number].number_of_actors--;
+  }
+}
+
 /* Code that POOL_SIZE threads have to execute.
 */
 void *thread_task(void *data) {
   uint32_t thread_number = *(uint32_t *) (data);
   int err;
+  actor_id_t actor_with_message;
 
   while (is_the_system_alive) {
     // Acquiring access to thread`s queue.
@@ -47,12 +77,15 @@ void *thread_task(void *data) {
         handle_error_en(err, "pthread_cond_wait");
     }
 
-    // Here, the thread does have the mutex and there is an actor with some messages.
+    // Here, the thread does have the mutex and there is at least one actor with some messages.
 
+    get_actor_to_receive_message(&actor_with_message, thread_number);
 
     // Returning access to the queue.
     if ((err = pthread_mutex_unlock(&actor_q[thread_number].lock)) != 0)
       handle_error_en(err, "pthread_mutex_unlock");
+
+    actor_receive_message(actor_with_message);
   }
 
   free(data);
