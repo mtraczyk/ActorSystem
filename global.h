@@ -29,6 +29,7 @@ typedef struct actor_info {
   void *state; // Actor`s state.
   message_buffer msg_q; // Buffer of messages acting as a queue.
   pthread_mutex_t lock;  // Mutex ensuring exclusive access to buffer.
+  bool is_actor_dead; // True if actor has received MSG_GODIE.
 } actor_info;
 
 static actor_info *actors; // An array of actors` info.
@@ -78,8 +79,15 @@ static inline void check_alloc_validity(void *const data) {
 // Enumeration types.
 
 enum actor_system_create_return_codes {
-  SUCCESS = 0,
-  ERROR = -1
+  SYSTEM_CREATION_SUCCESS = 0,
+  SYSTEM_CREATION_ERROR = -1
+};
+
+enum send_message_return_codes {
+  SEND_MESSAGE_SUCCESS = 0,
+  ACTOR_IS_DEAD = -1,
+  ACTOR_ID_INCORRECT = -2,
+  ACTOR_QUEUE_IS_FULL = -3
 };
 
 

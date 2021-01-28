@@ -15,6 +15,7 @@ void initialize() {
   if ((err = pthread_mutex_init(&actors[0].lock, 0)) != 0)
     handle_error_en(err, "pthread_mutex_init");
   actors[0].msg_q.writepos = actors[0].msg_q.readpos = actors[0].msg_q.number_of_messages = 0;
+  actors[0].is_actor_dead = false;
 
   check_alloc_validity(actor_q = malloc(POOL_SIZE * sizeof(actor_buffer)));
   for (uint32_t i = 0; i < POOL_SIZE; i++) {
@@ -98,7 +99,7 @@ actor_id_t actor_id_self() {
 // Creates a brand new actor system.
 int actor_system_create(actor_id_t *actor, role_t *const role) {
   if (actor == NULL || role == NULL)
-    return ERROR;
+    return SYSTEM_CREATION_ERROR;
 
   int err;
   initialize();
@@ -115,7 +116,7 @@ int actor_system_create(actor_id_t *actor, role_t *const role) {
       handle_error_en(err, "pthread_create");
   }
 
-  return SUCCESS;
+  return SYSTEM_CREATION_SUCCESS;
 }
 
 void actor_system_join(actor_id_t actor) {
@@ -129,8 +130,46 @@ void actor_system_join(actor_id_t actor) {
 #warning !CLEAN MEMORY!
 }
 
-int send_message(actor_id_t actor, message_t message) {
+void add_actor_to_thread_queue(actor_id_t actor) {
 
+}
+
+int send_message(actor_id_t actor, message_t message) {
+  int err;
+  bool is_actor_dead, is_queue_full;
+
+  if (actor >= number_of_actors)
+    return ACTOR_ID_INCORRECT;
+
+  // Obtaining exclusive access to the actor info.
+  if ((err = pthread_mutex_lock(&actors[actor].lock)) != 0)
+    handle_error_en(err, "pthread_mutex_lock");
+
+  is_actor_dead = actors[actor].is_actor_dead;
+  is_queue_full = actors[actor].msg_q.number_of_messages == ACTOR_QUEUE_LIMIT;
+
+  if (!is_actor_dead) {
+    if (actors[actor].msg_q.number_of_messages < ACTOR_QUEUE_LIMIT) {
+      actors[actor].msg_q.number_of_messages++;
+      actors[actor].msg_q.messages[actors[actor].msg_q.writepos] = message;
+      actors[actor].msg_q.writepos = (actors[actor].msg_q.writepos + 1) % ACTOR_QUEUE_LIMIT;
+
+      if (actors[actor].msg_q.number_of_messages == 1) {
+        add_actor_to_thread_queue(actor);
+      }
+    }
+  }
+
+  if ((err = pthread_mutex_unlock(&actors[actor].lock)) != 0)
+    handle_error_en(err, "pthread_mutex_unlock");
+
+  if (is_actor_dead)
+    return ACTOR_IS_DEAD;
+
+  if (is_queue_full)
+    return ACTOR_QUEUE_IS_FULL;
+
+  return SEND_MESSAGE_SUCCESS;
 }
 
 
