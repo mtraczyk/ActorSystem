@@ -4,6 +4,7 @@
 void initialize() {
   int err;
   number_of_actors = 1;
+  number_of_dead_actors = 0;
   actor_info_length = 1;
   if ((err = pthread_mutex_init(&mutex, 0)) != 0)
     handle_error_en(err, "pthread_mutex_init");
@@ -31,9 +32,56 @@ void initialize() {
   }
 }
 
+void obtain_message(actor_id_t actor, message_t *message) {
+  // Here I have exclusive access to the actor`s info.
+  *message = actors[actor].msg_q.messages[actors[actor].msg_q.readpos];
+  actors[actor].msg_q.readpos = (actors[actor].msg_q.readpos + 1) % ACTOR_QUEUE_LIMIT;
+  actors[actor].msg_q.number_of_messages--;
+}
+
+void receive_hello(uint32_t actor) {
+  // Here I still have exclusive access to the actor`s info.
+
+}
+
+void receive_spawn(uint32_t actor) {
+  // Here I still have exclusive access to the actor`s info.
+
+}
+
+void receive_godie(uint32_t actor) {
+  // Here I still have exclusive access to the actor`s info.
+
+}
+
+void receive_standard_message(uint32_t actor) {
+  // Here I still have exclusive access to the actor`s info.
+
+}
+
 void actor_receive_message(uint32_t actor_with_message) {
+  // Here I still have exclusive access to the actor`s info.
   int err;
-  // Here I still have the access to the actor`s info.
+  message_t message;
+
+  if (!actors[actor_with_message].is_actor_dead) {
+    obtain_message(actor_with_message, &message);
+
+
+    switch (message.message_type) {
+      case MSG_HELLO:
+        receive_hello(actor_with_message);
+        break;
+      case MSG_SPAWN:
+        receive_spawn(actor_with_message);
+        break;
+      case MSG_GODIE:
+        receive_godie(actor_with_message);
+        break;
+      default:
+        receive_standard_message(actor_with_message);
+    }
+  }
 
   if ((err = pthread_mutex_unlock(&actors[actor_with_message].lock)) != 0)
     handle_error_en(err, "pthread_mutex_unlock");
@@ -72,7 +120,7 @@ void *thread_task(void *data) {
     if ((err = pthread_mutex_lock(&actor_q[thread_number].lock)) != 0)
       handle_error_en(err, "pthread_mutex_lock");
 
-    while (!actor_q[thread_number].number_of_actors) {
+    while (actor_q[thread_number].number_of_actors == 0) {
       // Thread has nothing to do. Better for it to go to sleep.
       if ((err = pthread_cond_wait(&cond[thread_number], &actor_q[thread_number].lock)) != 0)
         handle_error_en(err, "pthread_cond_wait");
@@ -116,6 +164,9 @@ int actor_system_create(actor_id_t *actor, role_t *const role) {
       handle_error_en(err, "pthread_create");
   }
 
+  message_t aux = {0, sizeof(NULL), NULL};
+  send_message(actors[0].id, aux);
+
   return SYSTEM_CREATION_SUCCESS;
 }
 
@@ -150,6 +201,12 @@ void add_actor_to_thread_queue(actor_id_t actor) {
     handle_error_en(err, "pthread_mutex_lock");
 
   adjust_size_of_queue(thread_number);
+
+  if (actor_q[thread_number].number_of_actors == 0) {
+    // The thread is asleep, we have to wake it up.
+    if ((err = pthread_cond_signal(&cond[thread_number])) != 0)
+      handle_error_en(err, "pthread_cond_signal");
+  }
 
   // Now there must be enough place for another actor_id_t.
   actor_q[thread_number].actor_id[actor_q[thread_number].writepos] = actor;
