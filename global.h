@@ -13,12 +13,13 @@ static uint32_t number_of_actors; // Number of actors in the system.
 static pthread_mutex_t mutex; // Mutex for access to make global data changes.
 static pthread_attr_t attr; // pthread_attr_t for threads.
 static pthread_t th[POOL_SIZE]; // Threads` ids.
+static pthread_cond_t cond[POOL_SIZE]; // Thread will go to sleep when it has nothing to do.
 
 // Cyclic buffer of messages acting as a queue.
 typedef struct message_buffer {
   message_t *messages; // The actual data.
-  int readpos, writepos; // Positions for reading and writing.
-  int size; // Number of messages in the messages array.
+  uint32_t readpos, writepos; // Positions for reading and writing.
+  uint32_t size; // Number of messages in the messages array.
 } message_buffer;
 
 // Basic info about an actor.
@@ -37,11 +38,15 @@ static uint32_t actor_info_length; // Length of an actors array.
 typedef struct actor_buffer {
   actor_id_t *actor_id; // Actor`s id.
   pthread_mutex_t lock;  // Mutex ensuring exclusive access to buffer.
-  int readpos, writepos; // Positions for reading and writing.
-  int size; // Size of the buffer.
+  uint32_t readpos, writepos; // Positions for reading and writing.
+  uint32_t size; // Size of the buffer.
+  uint32_t number_of_actors; // Number of actors in the buffer.
 } actor_buffer;
 
-static actor_buffer *actor_q; // Actor_buffer, one for every thread acting as a queue.
+/* Actor_buffer, one for every thread acting as a queue.
+ * If actor is in the buffer it means he has a message to receive.
+ */
+static actor_buffer *actor_q;
 
 
 // Constants

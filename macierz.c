@@ -3,7 +3,9 @@
 
 int main() {
   actor_id_t first;
-  actor_system_create(&first, NULL);
+  role_t a;
+  a.nprompts = 0;
+  actor_system_create(&first, &a);
   actor_system_join(first);
 
   return 0;

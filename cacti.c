@@ -20,17 +20,39 @@ void initialize() {
   for (uint32_t i = 0; i < POOL_SIZE; i++) {
     check_alloc_validity(actor_q[i].actor_id = malloc(sizeof(actor_id_t)));
     actor_q[i].size = 1;
+    actor_q[i].number_of_actors = 0;
     actor_q[i].writepos = actor_q[i].readpos = 0;
     if ((err = pthread_mutex_init(&actor_q[i].lock, 0)) != 0)
       handle_error_en(err, "pthread_mutex_init");
+
+    if ((err = pthread_cond_init(&cond[i], 0)) != 0)
+      handle_error_en(err, "pthread_cond_init");
   }
 }
 
+/* Code that POOL_SIZE threads have to execute.
+*/
 void *thread_task(void *data) {
   uint32_t thread_number = *(uint32_t *) (data);
+  int err;
 
   while (is_the_system_alive) {
+    // Acquiring access to thread`s queue.
+    if ((err = pthread_mutex_lock(&actor_q[thread_number].lock)) != 0)
+      handle_error_en(err, "pthread_mutex_lock");
 
+    while (!actor_q[thread_number].number_of_actors) {
+      // Thread has nothing to do. Better for it to go to sleep.
+      if ((err = pthread_cond_wait(&cond[thread_number], &actor_q[thread_number].lock)) != 0)
+        handle_error_en(err, "pthread_cond_wait");
+    }
+
+    // Here, the thread does have the mutex and there is an actor with some messages.
+
+
+    // Returning access to the queue.
+    if ((err = pthread_mutex_unlock(&actor_q[thread_number].lock)) != 0)
+      handle_error_en(err, "pthread_mutex_unlock");
   }
 
   free(data);
@@ -70,6 +92,8 @@ void actor_system_join(actor_id_t actor) {
   for (uint32_t i = 0; i < POOL_SIZE; i++)
     if ((err = pthread_join(th[i], 0)) != 0)
       handle_error_en(err, "pthread_join");
+
+#warning !CLEAN MEMORY!
 }
 
 int send_message(actor_id_t actor, message_t message) {
