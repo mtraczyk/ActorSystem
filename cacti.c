@@ -39,22 +39,22 @@ void obtain_message(actor_id_t actor, message_t *message) {
   actors[actor].msg_q.number_of_messages--;
 }
 
-void receive_hello(uint32_t actor) {
+void receive_hello(uint32_t actor, message_t message) {
+  // Here I still have exclusive access to the actor`s info.
+  actors[actor].role->prompts[MSG_HELLO](&actors[actor].state, message.nbytes, message.data);
+}
+
+void receive_spawn(uint32_t actor, message_t message) {
   // Here I still have exclusive access to the actor`s info.
 
 }
 
-void receive_spawn(uint32_t actor) {
+void receive_godie(uint32_t actor, message_t message) {
   // Here I still have exclusive access to the actor`s info.
 
 }
 
-void receive_godie(uint32_t actor) {
-  // Here I still have exclusive access to the actor`s info.
-
-}
-
-void receive_standard_message(uint32_t actor) {
+void receive_standard_message(uint32_t actor, message_t message) {
   // Here I still have exclusive access to the actor`s info.
 
 }
@@ -70,16 +70,16 @@ void actor_receive_message(uint32_t actor_with_message) {
 
     switch (message.message_type) {
       case MSG_HELLO:
-        receive_hello(actor_with_message);
+        receive_hello(actor_with_message, message);
         break;
       case MSG_SPAWN:
-        receive_spawn(actor_with_message);
+        receive_spawn(actor_with_message, message);
         break;
       case MSG_GODIE:
-        receive_godie(actor_with_message);
+        receive_godie(actor_with_message, message);
         break;
       default:
-        receive_standard_message(actor_with_message);
+        receive_standard_message(actor_with_message, message);
     }
   }
 
