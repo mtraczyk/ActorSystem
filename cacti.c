@@ -40,17 +40,62 @@ void obtain_message(actor_id_t actor, message_t *message) {
   actors[actor].msg_q.number_of_messages--;
 }
 
-void receive_hello(uint32_t actor, message_t message) {
+void receive_hello(actor_id_t actor, message_t message) {
   // Here I still have exclusive access to the actor`s info.
+
+  /* If the receiver is not the first actor of the system, then message.data
+   * is the pointer to some actor`s id.
+   */
   actors[actor].role->prompts[MSG_HELLO](&actors[actor].state, message.nbytes, message.data);
 }
 
-void receive_spawn(uint32_t actor, message_t message) {
-  // Here I still have exclusive access to the actor`s info.
+void adjust_size_of_actors_data() {
+  // Here I have access to the global data.
+  if (number_of_actors == actor_info_length) {
+    actor_info_length = (actor_info_length + 1) * MULTIPLIER / DIVIDER;
+    check_alloc_validity(actors = realloc(actors, actor_info_length * sizeof(actor_info)));
+  }
 
+  actors[number_of_actors].msg_q.messages = malloc(ACTOR_QUEUE_LIMIT * sizeof(message_t));
 }
 
-void receive_godie(uint32_t actor, message_t message) {
+void create_new_actor(actor_id_t *new_actor, message_t message) {
+  // I have to get access to the global data.
+  int err;
+
+  if ((err = pthread_mutex_lock(&mutex)) != 0)
+    handle_error_en(err, "pthread_mutex_lock");
+
+  adjust_size_of_actors_data();
+
+  actors[number_of_actors].id = number_of_actors;
+  actors[number_of_actors].is_actor_dead = false;
+  actors[number_of_actors].role = (role_t *) message.data;
+  actors[number_of_actors].msg_q.number_of_messages =
+  actors[number_of_actors].msg_q.readpos = actors[number_of_actors].msg_q.writepos = 0;
+  if ((err = pthread_mutex_init(&actors[number_of_actors].lock, 0)) != 0)
+    handle_error_en(err, "pthread_mutex_init");
+
+  number_of_actors++;
+
+  if (number_of_actors > CAST_LIMIT)
+    exit(1);
+
+  if ((err = pthread_mutex_unlock(&mutex)) != 0)
+    handle_error_en(err, "pthread_mutex_unlock");
+}
+
+void receive_spawn(actor_id_t actor, message_t message) {
+  // Here I still have exclusive access to the actor`s info.
+  actor_id_t new_actor;
+  create_new_actor(&new_actor, message);
+
+  // Sending hello message to the new actor.
+  message_t aux = {MSG_HELLO, sizeof(actor_id_t), &actors[actor].id};
+  send_message(actors[new_actor].id, aux);
+}
+
+void receive_godie(actor_id_t actor, message_t message) {
   int err;
   // Here I still have exclusive access to the actor`s info.
   actors[actor].is_actor_dead = true;
@@ -77,11 +122,13 @@ void receive_godie(uint32_t actor, message_t message) {
     handle_error_en(err, "pthread_mutex_unlock");
 }
 
-void receive_standard_message(uint32_t actor, message_t message) {
+void receive_standard_message(actor_id_t actor, message_t message) {
   // Here I still have exclusive access to the actor`s info.
+  actors[actor].role->
+    prompts[message.message_type](&actors[actor].state, message.nbytes, message.data);
 }
 
-void actor_receive_message(uint32_t actor_with_message) {
+void actor_receive_message(actor_id_t actor_with_message) {
   // Here I still have exclusive access to the actor`s info.
   int err;
   message_t message;
@@ -185,7 +232,7 @@ void *thread_task(void *data) {
 
     actor_receive_message(actor_with_message);
   }
-  
+
   free(data);
 }
 
@@ -213,7 +260,7 @@ int actor_system_create(actor_id_t *actor, role_t *const role) {
       handle_error_en(err, "pthread_create");
   }
 
-  message_t aux = {0, sizeof(NULL), NULL};
+  message_t aux = {MSG_HELLO, sizeof(NULL), NULL};
   send_message(actors[0].id, aux);
 
   return SYSTEM_CREATION_SUCCESS;

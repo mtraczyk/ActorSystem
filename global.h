@@ -9,8 +9,8 @@
 #include <stdbool.h>
 
 static bool is_the_system_alive = true;
-static uint32_t number_of_actors; // Number of actors in the system.
-static uint32_t number_of_dead_actors;
+static uint64_t number_of_actors; // Number of actors in the system.
+static uint64_t number_of_dead_actors;
 static pthread_mutex_t mutex; // Mutex for access to make global data changes.
 static pthread_attr_t attr; // pthread_attr_t for threads.
 static pthread_t th[POOL_SIZE]; // Threads` ids.
@@ -19,8 +19,8 @@ static pthread_cond_t cond[POOL_SIZE]; // Thread will go to sleep when it has no
 // Cyclic buffer of messages acting as a queue.
 typedef struct message_buffer {
   message_t *messages; // The actual data.
-  uint32_t readpos, writepos; // Positions for reading and writing.
-  uint32_t number_of_messages; // Number of messages in the buffer.
+  uint64_t readpos, writepos; // Positions for reading and writing.
+  uint64_t number_of_messages; // Number of messages in the buffer.
 } message_buffer;
 
 // Basic info about an actor.
@@ -34,15 +34,15 @@ typedef struct actor_info {
 } actor_info;
 
 static actor_info *actors; // An array of actors` info.
-static uint32_t actor_info_length; // Length of an actors array.
+static uint64_t actor_info_length; // Length of an actors array.
 
 // Buffer of actor_id_t acting as a queue.
 typedef struct actor_buffer {
   actor_id_t *actor_id; // Actor`s id.
   pthread_mutex_t lock;  // Mutex ensuring exclusive access to buffer.
-  uint32_t readpos, writepos; // Positions for reading and writing.
-  uint32_t size; // Size of the buffer.
-  uint32_t number_of_actors; // Number of actors in the buffer.
+  actor_id_t readpos, writepos; // Positions for reading and writing.
+  uint64_t size; // Size of the buffer.
+  uint64_t number_of_actors; // Number of actors in the buffer.
 } actor_buffer;
 
 /* Actor_buffer, one for every thread acting as a queue.
@@ -54,10 +54,10 @@ static actor_buffer *actor_q;
 // Constants
 
 // Multiplier for reallocs in implementation of a vector.
-static const int MULTIPLIER = 3;
+static const uint64_t MULTIPLIER = 3;
 
 // Divider for reallocs in implementation of a vector.
-static const int DIVIDER = 2;
+static const uint64_t DIVIDER = 2;
 
 
 // Macros
