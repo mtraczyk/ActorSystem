@@ -160,6 +160,7 @@ void get_actor_to_receive_message(actor_id_t *actor_with_message, uint32_t threa
   int err;
 
   *actor_with_message = actor_q[thread_number].actor_id[actor_q[thread_number].readpos];
+  performing_actor[thread_number] = *actor_with_message;
   actor_q[thread_number].readpos =
     (actor_q[thread_number].readpos + 1) % actor_q[thread_number].size;
 
@@ -237,7 +238,24 @@ void *thread_task(void *data) {
 }
 
 actor_id_t actor_id_self() {
+  int err;
+  pthread_t thread_id = pthread_self();
+  actor_id_t actor_id_aux;
+  // Acquiring access to global data.
+  if ((err = pthread_mutex_lock(&mutex)) != 0)
+    handle_error_en(err, "pthread_mutex_lock");
 
+  for (uint32_t i = 0; i < POOL_SIZE; i++) {
+    if (th[i] == thread_id) {
+      actor_id_aux = performing_actor[i];
+      break;
+    }
+  }
+
+  if ((err = pthread_mutex_unlock(&mutex)) != 0)
+    handle_error_en(err, "pthread_mutex_unlock");
+
+  return actor_id_aux;
 }
 
 // Creates a brand new actor system.

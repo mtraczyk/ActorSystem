@@ -14,6 +14,7 @@ static uint64_t number_of_dead_actors;
 static pthread_mutex_t mutex; // Mutex for access to make global data changes.
 static pthread_attr_t attr; // pthread_attr_t for threads.
 static pthread_t th[POOL_SIZE]; // Threads` ids.
+static actor_id_t performing_actor[POOL_SIZE]; // Which actor is performing in a thread.
 static pthread_cond_t cond[POOL_SIZE]; // Thread will go to sleep when it has nothing to do.
 
 // Cyclic buffer of messages acting as a queue.
