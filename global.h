@@ -10,7 +10,8 @@
 
 static bool is_the_system_alive = true;
 static uint64_t number_of_actors; // Number of actors in the system.
-static uint64_t number_of_dead_actors;
+// Number of actors who are dead and have no more messages to receive.
+static uint64_t number_of_dead_and_finished_actors;
 static pthread_mutex_t mutex; // Mutex for access to make global data changes.
 static pthread_attr_t attr; // pthread_attr_t for threads.
 static pthread_t th[POOL_SIZE]; // Threads` ids.

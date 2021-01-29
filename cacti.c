@@ -5,7 +5,7 @@ void initialize() {
   int err;
   is_the_system_alive = true;
   number_of_actors = 1;
-  number_of_dead_actors = 0;
+  number_of_dead_and_finished_actors = 0;
   actor_info_length = 1;
   if ((err = pthread_mutex_init(&mutex, 0)) != 0)
     handle_error_en(err, "pthread_mutex_init");
@@ -96,17 +96,29 @@ void receive_spawn(actor_id_t actor, message_t message) {
 }
 
 void receive_godie(actor_id_t actor, message_t message) {
-  int err;
   // Here I still have exclusive access to the actor`s info.
   actors[actor].is_actor_dead = true;
+}
 
+void receive_standard_message(actor_id_t actor, message_t message) {
+  // Here I still have exclusive access to the actor`s info.
+  actors[actor].role->
+    prompts[message.message_type](&actors[actor].state, message.nbytes, message.data);
+}
+
+void update_state_of_the_system(actor_id_t actor) {
+  // Here I still have exclusive access to the actor`s info.
+  int err;
   // Acquiring access to global data.
   if ((err = pthread_mutex_lock(&mutex)) != 0)
     handle_error_en(err, "pthread_mutex_lock");
 
-  number_of_dead_actors++;
+  if (actors[actor].is_actor_dead && actors[actor].msg_q.number_of_messages == 0) {
+    // Actor has already received MSG_GODIE and has no more messages on his queue.
+    number_of_dead_and_finished_actors++;
+  }
 
-  if (number_of_dead_actors == number_of_actors) {
+  if (number_of_dead_and_finished_actors == number_of_actors) {
     // System can shut down, all actors are dead.
 
     is_the_system_alive = false;
@@ -122,34 +134,28 @@ void receive_godie(actor_id_t actor, message_t message) {
     handle_error_en(err, "pthread_mutex_unlock");
 }
 
-void receive_standard_message(actor_id_t actor, message_t message) {
-  // Here I still have exclusive access to the actor`s info.
-  actors[actor].role->
-    prompts[message.message_type](&actors[actor].state, message.nbytes, message.data);
-}
-
 void actor_receive_message(actor_id_t actor_with_message) {
   // Here I still have exclusive access to the actor`s info.
   int err;
   message_t message;
 
-  if (!actors[actor_with_message].is_actor_dead) {
-    obtain_message(actor_with_message, &message);
+  obtain_message(actor_with_message, &message);
 
-    switch (message.message_type) {
-      case MSG_HELLO:
-        receive_hello(actor_with_message, message);
-        break;
-      case MSG_SPAWN:
-        receive_spawn(actor_with_message, message);
-        break;
-      case MSG_GODIE:
-        receive_godie(actor_with_message, message);
-        break;
-      default:
-        receive_standard_message(actor_with_message, message);
-    }
+  switch (message.message_type) {
+    case MSG_HELLO:
+      receive_hello(actor_with_message, message);
+      break;
+    case MSG_SPAWN:
+      receive_spawn(actor_with_message, message);
+      break;
+    case MSG_GODIE:
+      receive_godie(actor_with_message, message);
+      break;
+    default:
+      receive_standard_message(actor_with_message, message);
   }
+
+  update_state_of_the_system(actor_with_message);
 
   if ((err = pthread_mutex_unlock(&actors[actor_with_message].lock)) != 0)
     handle_error_en(err, "pthread_mutex_unlock");
