@@ -8,15 +8,16 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-static bool is_the_system_alive = true;
-static uint64_t number_of_actors; // Number of actors in the system.
-// Number of actors who are dead and have no more messages to receive.
-static uint64_t number_of_dead_and_finished_actors;
-static pthread_mutex_t mutex; // Mutex for access to make global data changes.
-static pthread_attr_t attr; // pthread_attr_t for threads.
-static pthread_t th[POOL_SIZE]; // Threads` ids.
-static actor_id_t performing_actor[POOL_SIZE]; // Which actor is performing in a thread.
-static pthread_cond_t cond[POOL_SIZE]; // Thread will go to sleep when it has nothing to do.
+// Declaration of global variables.
+
+extern bool is_the_system_alive; // True when the system can shut down.
+extern uint64_t number_of_actors; // Number of actors in the system.
+extern uint64_t number_of_dead_and_finished_actors; // Actors that have empty queues and are dead.
+extern pthread_mutex_t mutex; // Mutex for access to make global data changes.
+extern pthread_attr_t attr; // pthread_attr_t for threads.
+extern pthread_t th[POOL_SIZE]; // Threads` ids.
+extern actor_id_t performing_actor[POOL_SIZE]; // Which actor is performing in a thread.
+extern pthread_cond_t cond[POOL_SIZE]; // Thread will go to sleep when it has nothing to do.
 
 // Cyclic buffer of messages acting as a queue.
 typedef struct message_buffer {
@@ -35,8 +36,8 @@ typedef struct actor_info {
   bool is_actor_dead; // True if actor has received MSG_GODIE.
 } actor_info;
 
-static actor_info *actors; // An array of actors` info.
-static uint64_t actor_info_length; // Length of an actors array.
+extern actor_info *actors; // An array of actors` info.
+extern uint64_t actor_info_length; // Length of an actors array.
 
 // Buffer of actor_id_t acting as a queue.
 typedef struct actor_buffer {
@@ -50,7 +51,7 @@ typedef struct actor_buffer {
 /* Actor_buffer, one for every thread acting as a queue.
  * If actor is in the buffer it means he has a message to receive.
  */
-static actor_buffer *actor_q;
+extern actor_buffer *actor_q;
 
 
 // Constants

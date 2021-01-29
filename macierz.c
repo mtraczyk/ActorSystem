@@ -1,11 +1,23 @@
 #include "cacti.h"
-#include "global.h"
+#include <stdio.h>
+
+typedef void (*act)(void **stateptr, size_t nbytes, void *data);
 
 void f(void **stateptr, size_t nbytes, void *data) {
   printf("HELLO WORLD\n");
-}
+  static act prompts[1];
+  prompts[0] = &f;
+  static role_t a = {1, prompts};
+  a.nprompts = 0;
 
-typedef void (*act)(void **stateptr, size_t nbytes, void *data);
+  if (actor_id_self() < 4) {
+    message_t message = {MSG_SPAWN, sizeof(role_t), &a};
+    send_message(actor_id_self(), message);
+  }
+
+  message_t message = {MSG_GODIE, 0, NULL};
+  send_message(actor_id_self(), message);
+}
 
 int main() {
   actor_id_t first;

@@ -1,37 +1,5 @@
 #include "global.h"
-
-// Initializes global memory of the current actor system.
-void initialize() {
-  int err;
-  is_the_system_alive = true;
-  number_of_actors = 1;
-  number_of_dead_and_finished_actors = 0;
-  actor_info_length = 1;
-  if ((err = pthread_mutex_init(&mutex, 0)) != 0)
-    handle_error_en(err, "pthread_mutex_init");
-  if ((err = pthread_attr_init(&attr)) != 0)
-    handle_error_en(err, "pthread_attr_init");
-
-  check_alloc_validity(actors = malloc(sizeof(actor_info)));
-  check_alloc_validity(actors[0].msg_q.messages = malloc(ACTOR_QUEUE_LIMIT * sizeof(message_t)));
-  if ((err = pthread_mutex_init(&actors[0].lock, 0)) != 0)
-    handle_error_en(err, "pthread_mutex_init");
-  actors[0].msg_q.writepos = actors[0].msg_q.readpos = actors[0].msg_q.number_of_messages = 0;
-  actors[0].is_actor_dead = false;
-
-  check_alloc_validity(actor_q = malloc(POOL_SIZE * sizeof(actor_buffer)));
-  for (uint32_t i = 0; i < POOL_SIZE; i++) {
-    check_alloc_validity(actor_q[i].actor_id = malloc(sizeof(actor_id_t)));
-    actor_q[i].size = 1;
-    actor_q[i].number_of_actors = 0;
-    actor_q[i].writepos = actor_q[i].readpos = 0;
-    if ((err = pthread_mutex_init(&actor_q[i].lock, 0)) != 0)
-      handle_error_en(err, "pthread_mutex_init");
-
-    if ((err = pthread_cond_init(&cond[i], 0)) != 0)
-      handle_error_en(err, "pthread_cond_init");
-  }
-}
+#include "cacti_aux.h"
 
 void obtain_message(actor_id_t actor, message_t *message) {
   // Here I have exclusive access to the actor`s info.
@@ -41,19 +9,38 @@ void obtain_message(actor_id_t actor, message_t *message) {
 }
 
 void receive_hello(actor_id_t actor, message_t message) {
-  // Here I still have exclusive access to the actor`s info.
+  int err;
+
+  act_t aux = actors[actor].role->prompts[message.message_type];
+  if ((err = pthread_mutex_unlock(&actors[actor].lock)) != 0)
+    handle_error_en(err, "pthread_mutex_unlock");
 
   /* If the receiver is not the first actor of the system, then message.data
    * is the pointer to some actor`s id.
    */
-  actors[actor].role->prompts[MSG_HELLO](&actors[actor].state, message.nbytes, message.data);
+  printf("%ld %ld\n", actor, message.message_type);
+  aux(&actors[actor].state, message.nbytes, message.data);
+  printf("%ld %ld\n", actor, message.message_type);
 }
 
 void adjust_size_of_actors_data() {
   // Here I have access to the global data.
   if (number_of_actors == actor_info_length) {
+    // Here I need to block the whole system. All the threads.
+    int err;
+
+    for (uint32_t i = 0; i < POOL_SIZE; i++) {
+      if ((err = pthread_mutex_lock(&actor_q[i].lock)) != 0)
+        handle_error_en(err, "pthread_mutex_lock");
+    }
+
     actor_info_length = (actor_info_length + 1) * MULTIPLIER / DIVIDER;
     check_alloc_validity(actors = realloc(actors, actor_info_length * sizeof(actor_info)));
+
+    for (uint32_t i = 0; i < POOL_SIZE; i++) {
+      if ((err = pthread_mutex_unlock(&actor_q[i].lock)) != 0)
+        handle_error_en(err, "pthread_mutex_unlock");
+    }
   }
 
   actors[number_of_actors].msg_q.messages = malloc(ACTOR_QUEUE_LIMIT * sizeof(message_t));
@@ -87,9 +74,13 @@ void create_new_actor(actor_id_t *new_actor, message_t message) {
 }
 
 void receive_spawn(actor_id_t actor, message_t message) {
-  // Here I still have exclusive access to the actor`s info.
+  int err;
+
   actor_id_t new_actor;
   create_new_actor(&new_actor, message);
+
+  if ((err = pthread_mutex_unlock(&actors[actor].lock)) != 0)
+    handle_error_en(err, "pthread_mutex_unlock");
 
   // Sending hello message to the new actor.
   message_t aux = {MSG_HELLO, sizeof(actor_id_t), &actors[actor].id};
@@ -97,19 +88,30 @@ void receive_spawn(actor_id_t actor, message_t message) {
 }
 
 void receive_godie(actor_id_t actor) {
-  // Here I still have exclusive access to the actor`s info.
+  int err;
+  if ((err = pthread_mutex_unlock(&actors[actor].lock)) != 0)
+    handle_error_en(err, "pthread_mutex_unlock");
+
   actors[actor].is_actor_dead = true;
 }
 
 void receive_standard_message(actor_id_t actor, message_t message) {
-  // Here I still have exclusive access to the actor`s info.
-  actors[actor].role->
-    prompts[message.message_type](&actors[actor].state, message.nbytes, message.data);
+  int err;
+  act_t aux = actors[actor].role->prompts[message.message_type];
+
+  if ((err = pthread_mutex_unlock(&actors[actor].lock)) != 0)
+    handle_error_en(err, "pthread_mutex_unlock");
+
+  aux(&actors[actor].state, message.nbytes, message.data);
 }
 
 void update_state_of_the_system(actor_id_t actor) {
-  // Here I still have exclusive access to the actor`s info.
   int err;
+
+  // I need to obtain exclusive access to the *actor_with_message data.
+  if ((err = pthread_mutex_lock(&actors[actor].lock)) != 0)
+    handle_error_en(err, "pthread_mutex_lock");
+
   // Acquiring access to global data.
   if ((err = pthread_mutex_lock(&mutex)) != 0)
     handle_error_en(err, "pthread_mutex_lock");
@@ -133,11 +135,13 @@ void update_state_of_the_system(actor_id_t actor) {
 
   if ((err = pthread_mutex_unlock(&mutex)) != 0)
     handle_error_en(err, "pthread_mutex_unlock");
+
+  if ((err = pthread_mutex_unlock(&actors[actor].lock)) != 0)
+    handle_error_en(err, "pthread_mutex_unlock");
 }
 
 void actor_receive_message(actor_id_t actor_with_message) {
   // Here I still have exclusive access to the actor`s info.
-  int err;
   message_t message;
 
   obtain_message(actor_with_message, &message);
@@ -157,9 +161,6 @@ void actor_receive_message(actor_id_t actor_with_message) {
   }
 
   update_state_of_the_system(actor_with_message);
-
-  if ((err = pthread_mutex_unlock(&actors[actor_with_message].lock)) != 0)
-    handle_error_en(err, "pthread_mutex_unlock");
 }
 
 // Gets id of an actor with messages, updates the queue accordingly to the situation.
@@ -242,6 +243,8 @@ void *thread_task(void *data) {
   }
 
   free(data);
+
+  return NULL;
 }
 
 actor_id_t actor_id_self() {
@@ -294,7 +297,7 @@ int actor_system_create(actor_id_t *actor, role_t *const role) {
 void clean_system_memory() {
   int err;
 
-  for (uint64_t i = 0; i < actor_info_length; i++) {
+  for (uint64_t i = 0; i < number_of_actors; i++) {
     if ((err = pthread_mutex_destroy(&actors[i].lock)) != 0)
       handle_error_en(err, "pthread_mutex_destroy");
 
@@ -383,6 +386,8 @@ int send_message(actor_id_t actor, message_t message) {
   is_queue_full = actors[actor].msg_q.number_of_messages == ACTOR_QUEUE_LIMIT;
 
   if (!is_actor_dead) {
+    //  printf("%d %lld\n", actor, message.message_type);
+
     if (actors[actor].msg_q.number_of_messages < ACTOR_QUEUE_LIMIT) {
       actors[actor].msg_q.number_of_messages++;
       actors[actor].msg_q.messages[actors[actor].msg_q.writepos] = message;
