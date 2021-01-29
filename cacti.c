@@ -69,6 +69,7 @@ void create_new_actor(actor_id_t *new_actor, message_t message) {
   adjust_size_of_actors_data();
 
   actors[number_of_actors].id = number_of_actors;
+  *new_actor = actors[number_of_actors].id;
   actors[number_of_actors].is_actor_dead = false;
   actors[number_of_actors].role = (role_t *) message.data;
   actors[number_of_actors].msg_q.number_of_messages =
@@ -95,7 +96,7 @@ void receive_spawn(actor_id_t actor, message_t message) {
   send_message(actors[new_actor].id, aux);
 }
 
-void receive_godie(actor_id_t actor, message_t message) {
+void receive_godie(actor_id_t actor) {
   // Here I still have exclusive access to the actor`s info.
   actors[actor].is_actor_dead = true;
 }
@@ -149,7 +150,7 @@ void actor_receive_message(actor_id_t actor_with_message) {
       receive_spawn(actor_with_message, message);
       break;
     case MSG_GODIE:
-      receive_godie(actor_with_message, message);
+      receive_godie(actor_with_message);
       break;
     default:
       receive_standard_message(actor_with_message, message);
@@ -313,6 +314,9 @@ void clean_system_memory() {
 void actor_system_join(actor_id_t actor) {
   int err;
 
+  if (actor >= (int64_t) number_of_actors)
+    exit(1);
+
   for (uint32_t i = 0; i < POOL_SIZE; i++)
     if ((err = pthread_join(th[i], 0)) != 0)
       handle_error_en(err, "pthread_join");
@@ -365,7 +369,7 @@ int send_message(actor_id_t actor, message_t message) {
   if ((err = pthread_mutex_lock(&mutex)) != 0)
     handle_error_en(err, "pthread_mutex_lock");
 
-  if (actor >= number_of_actors)
+  if (actor >= (int64_t) number_of_actors)
     return ACTOR_ID_INCORRECT;
 
   if ((err = pthread_mutex_unlock(&mutex)) != 0)
