@@ -290,6 +290,26 @@ int actor_system_create(actor_id_t *actor, role_t *const role) {
   return SYSTEM_CREATION_SUCCESS;
 }
 
+void clean_system_memory() {
+  int err;
+
+  for (uint64_t i = 0; i < actor_info_length; i++) {
+    if ((err = pthread_mutex_destroy(&actors[i].lock)) != 0)
+      handle_error_en(err, "pthread_mutex_destroy");
+
+    free(actors[i].msg_q.messages);
+  }
+  free(actors);
+
+  for (uint32_t i = 0; i < POOL_SIZE; i++) {
+    if ((err = pthread_mutex_destroy(&actor_q[i].lock)) != 0)
+      handle_error_en(err, "pthread_mutex_destroy");
+
+    free(actor_q[i].actor_id);
+  }
+  free(actor_q);
+}
+
 void actor_system_join(actor_id_t actor) {
   int err;
 
@@ -297,7 +317,7 @@ void actor_system_join(actor_id_t actor) {
     if ((err = pthread_join(th[i], 0)) != 0)
       handle_error_en(err, "pthread_join");
 
-#warning !CLEAN MEMORY!
+  clean_system_memory();
 }
 
 // If needed adjusts thread`s queue size.
