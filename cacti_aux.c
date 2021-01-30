@@ -169,9 +169,7 @@ void receive_hello(actor_id_t actor, message_t message) {
   /* If the receiver is not the first actor of the system, then message.data
    * is the pointer to some actor`s id.
    */
-  printf("%ld %ld\n", actor, message.message_type);
   aux(&actors[actor].state, message.nbytes, message.data);
-  printf("%ld %ld\n", actor, message.message_type);
 }
 
 void create_new_actor(actor_id_t *new_actor, message_t message) {

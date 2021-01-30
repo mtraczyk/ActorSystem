@@ -63,16 +63,18 @@ void actor_system_join(actor_id_t actor) {
 
 int send_message(actor_id_t actor, message_t message) {
   int err;
-  bool is_actor_dead, is_queue_full;
+  bool is_actor_dead, is_queue_full, is_id_incorrect;
 
   if ((err = pthread_mutex_lock(&mutex)) != 0)
     handle_error_en(err, "pthread_mutex_lock");
 
-  if (actor >= (int64_t) number_of_actors)
-    return ACTOR_ID_INCORRECT;
+  is_id_incorrect = (actor >= (int64_t) number_of_actors);
 
   if ((err = pthread_mutex_unlock(&mutex)) != 0)
     handle_error_en(err, "pthread_mutex_unlock");
+
+  if (is_id_incorrect)
+    return ACTOR_ID_INCORRECT;
 
   // Obtaining exclusive access to the actor info.
   if ((err = pthread_mutex_lock(&actors[actor].lock)) != 0)
@@ -82,8 +84,6 @@ int send_message(actor_id_t actor, message_t message) {
   is_queue_full = actors[actor].msg_q.number_of_messages == ACTOR_QUEUE_LIMIT;
 
   if (!is_actor_dead) {
-    //  printf("%d %lld\n", actor, message.message_type);
-
     if (actors[actor].msg_q.number_of_messages < ACTOR_QUEUE_LIMIT) {
       actors[actor].msg_q.number_of_messages++;
       actors[actor].msg_q.messages[actors[actor].msg_q.writepos] = message;
@@ -103,6 +103,7 @@ int send_message(actor_id_t actor, message_t message) {
 
   if (is_queue_full)
     return ACTOR_QUEUE_IS_FULL;
+
 
   return SEND_MESSAGE_SUCCESS;
 }
